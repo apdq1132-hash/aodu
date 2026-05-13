@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { margin: 0; padding-bottom: 70px; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        #auth-screen { display: none; height: 100vh; flex-direction: column; justify-content: center; padding: 20px; }
+        .auth-container { width: 100%; max-width: 400px; margin: 0 auto; }
+        .shelf { margin: 20px 10px; }
+        .shelf-title { font-weight: bold; margin-bottom: 10px; }
+        .scroll-container { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
+        /* تعديل لعرض الصورة كاملة داخل حدود الشاشة */
+        .story-item { min-width: 100px; height: 140px; background-color: #ddd; border-radius: 8px; background-size: cover; background-position: center; cursor: pointer; box-sizing: border-box; }
+        
+        #write-screen, #create-story-screen, #editor-screen, #story-detail-screen, #select-story-screen, #edit-option-screen, #library-screen, #search-screen { display: none; padding: 20px; }
+        .menu-item { padding: 20px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; cursor: pointer; }
+        
+        .top-bar { display: flex; justify-content: space-between; padding: 10px; align-items: center; }
+        .next-btn { color: #000; font-weight: bold; cursor: pointer; }
+        .next-btn.active { color: #ff500a; }
+
+        .upload-box { width: 100px; height: 130px; border: 1px dashed #ccc; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 20px; cursor: pointer; overflow: hidden; }
+        
+        input[type="text"], input[type="email"], input[type="password"], textarea { width: 100%; box-sizing: border-box; margin-bottom: 15px; padding: 10px; border: 1px solid #eee; }
+        textarea { min-height: 200px; }
+
+        .editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
+        #publish-btn { background-color: #ff500a; color: white; padding: 8px 25px; border-radius: 20px; cursor: pointer; font-weight: bold; border: none; }
+        #publish-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .image-preview { margin-top: 10px; margin-bottom: 10px; position: relative; display: inline-block; }
+        .image-preview img { max-width: 100%; border-radius: 8px; display: block; }
+        
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; height: 65px; background-color: #ffffff; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #e0e0e0; padding-bottom: 5px; z-index: 999; }
+        .nav-item { color: #888; font-size: 22px; cursor: pointer; display: flex; flex-direction: column; align-items: center; -webkit-tap-highlight-color: transparent; }
+        .nav-item.center-pen { background-color: #ff500a; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(255, 80, 10, 0.4); font-size: 20px; }
+        .nav-item.active { color: #ff500a; }
+        
+        #story-detail-screen { display: none; padding: 0; }
+        .detail-img { width: 110px; height: 160px; background-size: cover; background-position: center; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); flex-shrink: 0; }
+        
+        .search-list-item { display: flex; padding: 10px; border-bottom: 1px solid #eee; align-items: center; cursor: pointer; }
+        .search-item-img { width: 70px; height: 100px; background-size: cover; background-position: center; border-radius: 4px; margin-left: 15px; }
+        .search-item-info { display: flex; flex-direction: column; gap: 5px; }
+
+        #custom-alert-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center; }
+        .alert-box { background:white; padding:20px; border-radius:10px; text-align:center; width: 80%; max-width: 300px; }
+        .alert-btn { margin-top:20px; padding:10px 20px; background:#ff500a; color:white; border:none; border-radius:5px; cursor:pointer; width: 100%; }
+
+        /* دائرة التحميل */
+        #loading-spinner { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; }
+        .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #ff500a; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div id="loading-spinner"><div class="spinner"></div></div>
+
+    <div id="auth-screen">
+        <div class="auth-container">
+            <h2 id="auth-title" style="text-align:center;">تسجيل الدخول</h2>
+            <input type="email" id="auth-email" placeholder="البريد الإلكتروني">
+            <input type="password" id="auth-password" placeholder="كلمة المرور">
+            <button id="auth-submit-btn" style="width:100%; background:#ff500a; color:white; border:none; padding:12px; border-radius:5px; font-weight:bold; cursor:pointer;">دخول</button>
+            <p id="auth-toggle-text" onclick="toggleAuthMode()" style="text-align:center; cursor:pointer; color:#ff500a; margin-top:15px;">ليس لديك حساب؟ سجل الآن</p>
+        </div>
+    </div>
+
+    <div id="custom-alert-modal">
+        <div class="alert-box">
+            <p id="alert-message"></p>
+            <button class="alert-btn" onclick="closeCustomAlert()">موافق</button>
+        </div>
+    </div>
+
+    <div id="main-app" style="display:none;">
+        <div id="content">
+            <div class="shelf"><div class="shelf-title">واصل القراءة</div><div class="scroll-container"></div></div>
+            <div class="shelf"><div class="shelf-title">أبرز المختارات من أجلك</div><div class="scroll-container"></div></div>
+            <div class="shelf"><div class="shelf-title">مقترحات من أجلك</div><div class="scroll-container"></div></div>
+            <div class="shelf"><div class="shelf-title">قصص مكتملة</div><div class="scroll-container"></div></div>
+            <div class="shelf"><div class="shelf-title">قراءتك التالية</div><div class="scroll-container"></div></div>
+        </div>
+
+        <div id="search-screen">
+            <div class="top-bar">
+                <span onclick="location.reload()" style="cursor:pointer;"><i class="fa-solid fa-arrow-right"></i></span>
+                <span style="font-weight:bold;">البحث</span>
+                <span></span>
+            </div>
+            <input type="text" id="search-box" placeholder="ابحث عن قصص...">
+            <div id="search-results"></div>
+        </div>
+
+        <div id="library-screen">
+            <div class="top-bar">
+                <div onclick="location.reload()" style="background-color: #ff500a; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: white;">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </div>
+                <span></span>
+            </div>
+            <div style="background-color: black; color: white; text-align: center; padding: 10px; margin: 10px 0;">قصصي المحملة</div>
+            <div id="local-library-container" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px;"></div>
+            <div class="shelf"><div class="shelf-title">قصص ننصح بها</div><div id="recommended-container" class="scroll-container"></div></div>
+        </div>
+
+        <div id="confirm-dialog" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+            <div style="background:white; padding:20px; border-radius:10px; text-align:center; width: 80%;">
+                <p>هل أنت متأكد من الحذف؟</p>
+                <div style="display:flex; justify-content:space-around; margin-top:20px;">
+                    <button id="confirm-yes" style="padding:10px 20px; cursor:pointer;">نعم</button>
+                    <button id="confirm-no" style="padding:10px 20px; cursor:pointer;">لا</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="story-detail-screen">
+            <div class="top-bar" id="story-detail-top-bar">
+                <i class="fa-solid fa-arrow-right" onclick="location.reload()" style="font-size: 20px; cursor: pointer;"></i>
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+            </div>
+            <div id="detail-content"></div>
+        </div>
+
+        <div id="write-screen">
+            <div class="menu-item" id="btn-my-stories">قصصي <i class="fa-solid fa-list"></i></div>
+            <div class="menu-item" id="btn-create-story">إنشاء قصة جديدة <i class="fa-solid fa-plus"></i></div>
+            <div class="menu-item" id="btn-add-chapter">إضافة فصل <i class="fa-solid fa-plus"></i></div>
+            <div class="menu-item" id="btn-edit">تعديل قصة أو فصل <i class="fa-solid fa-pen-to-square"></i></div>
+        </div>
+
+        <div id="edit-option-screen">
+            <div class="top-bar"><span onclick="location.reload()">رجوع</span><span>تعديل</span></div>
+            <div class="menu-item" id="btn-edit-story-list">تعديل قصة</div>
+            <div class="menu-item" id="btn-edit-chapter-list">تعديل فصل</div>
+        </div>
+
+        <div id="select-story-screen">
+            <div class="top-bar"><span onclick="location.reload()">رجوع</span><span>اختر</span></div>
+            <div id="story-list-container"></div>
+        </div>
+
+        <div id="create-story-screen">
+            <div class="top-bar">
+                <span>أضف معلومات القصة</span>
+                <span class="next-btn" id="next-btn">التالي</span>
+            </div>
+            <label for="file-upload" class="upload-box" id="upload-label"><i class="fa-solid fa-plus"></i> أضف غلافاً</label>
+            <input id="file-upload" type="file" style="display:none;" accept="image/*">
+            <input type="text" id="title-input" placeholder="عنوان القصة">
+            <input type="text" id="nem-input" placeholder="اسم الكاتب">
+            <textarea id="desc-input" placeholder="وصف القصة"></textarea>
+        </div>
+
+        <div id="editor-screen">
+            <div class="editor-header">
+                <span>كتابة</span>
+                <button id="publish-btn" disabled>نشر</button>
+            </div>
+            <input type="text" id="part-title" placeholder="أعط عنواناً لهذا الفصل من قصتك">
+            <div id="image-container" class="image-preview"></div>
+            <textarea id="main-editor-area" style="height: 100px;" placeholder="اضغط هنا لبدء الكتابة"></textarea>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item active" id="home-nav"><i class="fa-solid fa-house"></i></div>
+            <div class="nav-item" id="search-nav-btn"><i class="fa-solid fa-magnifying-glass"></i></div>
+            <div class="nav-item center-pen"><i class="fa-solid fa-pen"></i></div>
+            <div class="nav-item"><i class="fa-solid fa-bars"></i></div>
+            <div class="nav-item"><i class="fa-regular fa-bell"></i></div>
+        </div>
+    </div>
+
+    <script>
+        const _supabase = supabase.createClient('https://warzwyuiiapkdbwbtchg.supabase.co', 'sb_publishable_mCVbIuIw7bv0ljVDavAvrA_pLt-MbNb');
+        
+        let shouldReload = false;
+        function showCustomAlert(msg) {
+            document.getElementById('alert-message').innerText = msg;
+            document.getElementById('custom-alert-modal').style.display = 'flex';
+        }
+        function closeCustomAlert() {
+            document.getElementById('custom-alert-modal').style.display = 'none';
+            if (shouldReload) {
+                shouldReload = false;
+                location.reload();
+            }
+        }
+
+        let currentUserId = null;
+
+        _supabase.auth.getSession().then(({ data }) => {
+            if (data.session) {
+                currentUserId = data.session.user.id;
+                document.getElementById('main-app').style.display = 'block';
+                loadStoriesFromDB();
+            } else {
+                document.getElementById('auth-screen').style.display = 'flex';
+            }
+        });
+
+        let isLoginMode = true;
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('auth-title').innerText = isLoginMode ? 'تسجيل الدخول' : 'إنشاء حساب';
+            document.getElementById('auth-submit-btn').innerText = isLoginMode ? 'دخول' : 'إنشاء';
+            document.getElementById('auth-toggle-text').innerText = isLoginMode ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب؟ سجل الدخول';
+        }
+
+        document.getElementById('auth-submit-btn').addEventListener('click', async () => {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            let result;
+            
+            if (isLoginMode) {
+                result = await _supabase.auth.signInWithPassword({ email, password });
+                if (result.error) {
+                    showCustomAlert(result.error.message);
+                } else {
+                    location.reload();
+                }
+            } else {
+                result = await _supabase.auth.signUp({ email, password });
+                if (result.error) {
+                    showCustomAlert(result.error.message);
+                } else {
+                    showCustomAlert("راجع بريدك الإلكتروني لتأكيد تسجيل حسابك ثم حاول تسجيل الدخول مجددا");
+                }
+            }
+        });
+
+        const searchScreen = document.getElementById('search-screen');
+        const searchBox = document.getElementById('search-box');
+        const searchResults = document.getElementById('search-results');
+        const searchNavBtn = document.getElementById('search-nav-btn');
+
+        let isPublishing = false;
+        let storyToDeleteId = null;
+        const items = document.querySelectorAll('.nav-item');
+        const content = document.getElementById('content');
+        const storyDetailScreen = document.getElementById('story-detail-screen');
+        const writeScreen = document.getElementById('write-screen');
+        const createStoryScreen = document.getElementById('create-story-screen');
+        const editorScreen = document.getElementById('editor-screen');
+        const btnCreateStory = document.getElementById('btn-create-story');
+        const btnAddChapter = document.getElementById('btn-add-chapter');
+        const selectStoryScreen = document.getElementById('select-story-screen');
+        const storyListContainer = document.getElementById('story-list-container');
+        const fileUpload = document.getElementById('file-upload');
+        const nextBtn = document.getElementById('next-btn');
+        const titleInput = document.getElementById('title-input');
+        const nemInput = document.getElementById('nem-input');
+        const descInput = document.getElementById('desc-input');
+        const editorArea = document.getElementById('main-editor-area');
+        const publishBtn = document.getElementById('publish-btn');
+        const homeNav = document.getElementById('home-nav');
+        const btnEdit = document.getElementById('btn-edit');
+        const editOptionScreen = document.getElementById('edit-option-screen');
+        const btnMyStories = document.getElementById('btn-my-stories');
+        const libraryScreen = document.getElementById('library-screen');
+        const partTitle = document.getElementById('part-title');
+        const confirmDialog = document.getElementById('confirm-dialog');
+        const confirmYes = document.getElementById('confirm-yes');
+        const confirmNo = document.getElementById('confirm-no');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        let hasImage = false;
+        let coverFile = null;
+        let selectedStoryId = null;
+        let isEditMode = false;
+        let editTargetId = null;
+        let editType = null; 
+
+        searchBox.addEventListener('input', async () => {
+            const query = searchBox.value;
+            if(query.length < 2) { searchResults.innerHTML = ''; return; }
+            const { data } = await _supabase.from('stories').select('*').or(`title.ilike.%${query}%,description.ilike.%${query}%`);
+            searchResults.innerHTML = '';
+            (data || []).forEach(story => {
+                const div = document.createElement('div');
+                div.className = 'search-list-item';
+                div.onclick = () => openStoryDetail(story);
+                div.innerHTML = `
+                    <div class="search-item-img" style="background-image: url(${story.image_data});"></div>
+                    <div class="search-item-info">
+                        <div style="font-weight:bold;">${story.title}</div>
+                        <div style="font-size: 12px; color: #ff500a;">${story.nem || 'كاتب غير معروف'}</div>
+                        <div style="font-size: 12px; color: #888;">${story.views || 0} مشاهدة</div>
+                    </div>
+                `;
+                searchResults.appendChild(div);
+            });
+        });
+
+        const checkEditor = () => {
+            if(partTitle.value.trim() && editorArea.value.trim()) publishBtn.disabled = false;
+            else publishBtn.disabled = true;
+        };
+        partTitle.addEventListener('input', checkEditor);
+        editorArea.addEventListener('input', checkEditor);
+
+        async function loadStoriesFromDB() {
+            loadingSpinner.style.display = 'block';
+            const containers = document.querySelectorAll('.scroll-container');
+            const { data } = await _supabase.from('stories').select('*').order('created_at', { ascending: false });
+            
+            if (data) {
+                window.storiesCache = data;
+                
+                // خلط القصص عشوائياً
+                let shuffledStories = [...data].sort(() => 0.5 - Math.random());
+                let usedStoryIds = new Set();
+
+                containers.forEach((container, index) => {
+                    container.innerHTML = '';
+                    
+                    // اختيار 10 قصص لم تظهر سابقاً في الرفوف العلوية
+                    let count = 0;
+                    for (let story of shuffledStories) {
+                        if (count >= 10) break;
+                        if (!usedStoryIds.has(story.id)) {
+                            usedStoryIds.add(story.id);
+                            count++;
+                            
+                            const wrapper = document.createElement('div');
+                            wrapper.style.minWidth = '100px';
+                            wrapper.onclick = (e) => {
+                                const originalContent = wrapper.innerHTML;
+                                wrapper.innerHTML = `<div class="story-item" style="display:flex; align-items:center; justify-content:center; background:#eee; border-radius:8px; height:140px;"><i class="fa-solid fa-spinner fa-spin" style="color:#ff500a; font-size:24px;"></i></div>`;
+                                openStoryDetail(story).finally(() => {
+                                    wrapper.innerHTML = originalContent;
+                                });
+                            };
+                            
+                            let htmlContent = `<div class="story-item" style="background-image: url(${story.image_data});"></div>`;
+                            
+                            // إضافة العين والمشاهدات للرف الثالث (index 2) والرابع (index 3)
+                            if (index === 2 || index === 3) {
+                                htmlContent += `<div style="text-align: center; margin-top: 5px; font-size: 12px; color: #666; font-weight: bold;"><i class="fa-solid fa-eye"></i> ${story.views || 0}</div>`;
+                            }
+                            
+                            wrapper.innerHTML = htmlContent;
+                            container.appendChild(wrapper);
+                        }
+                    }
+                });
+            }
+            loadingSpinner.style.display = 'none';
+        }
+
+        async function openStoryDetail(story) {
+            let storyData = window.storiesCache ? window.storiesCache.find(s => s.id === story.id) : null;
+            if(!storyData) {
+                const { data } = await _supabase.from('stories').select('*').eq('id', story.id).single();
+                storyData = data;
+            }
+            
+            const { data: chapters } = await _supabase.from('chapters').select('*').eq('story_id', story.id).order('id', { ascending: true });
+            
+            window.currentChapters = chapters;
+            _supabase.from('stories').update({ views: (storyData.views || 0) + 1 }).eq('id', storyData.id);
+            
+            content.style.display = 'none';
+            libraryScreen.style.display = 'none';
+            searchScreen.style.display = 'none';
+            writeScreen.style.display = 'none';
+            createStoryScreen.style.display = 'none';
+            editorScreen.style.display = 'none';
+            selectStoryScreen.style.display = 'none';
+            editOptionScreen.style.display = 'none';
+
+            storyDetailScreen.style.display = 'block';
+
+            const updateStoryUI = (viewType) => {
+                const isSummary = viewType === 'summary';
+                const chList = chapters || [];
+                
+                // تحديث الـ Top Bar بناءً على الحالة
+                const topBar = document.getElementById('story-detail-top-bar');
+                if (viewType === 'summary') {
+                    topBar.innerHTML = `<i class="fa-solid fa-arrow-right" onclick="location.reload()" style="font-size: 20px; cursor: pointer;"></i><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                } else if (viewType === 'chapters') {
+                    topBar.innerHTML = `<span></span><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                }
+
+                document.getElementById('detail-content').innerHTML = `
+                    <div style="padding: 20px;">
+                        <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: flex-start;">
+                            <div style="flex: 1; text-align: right;">
+                                <div style="font-size: 22px; font-weight: bold; margin-bottom: 5px;">${storyData.title}</div>
+                                <div style="color: #ff500a; font-weight: bold; margin-bottom: 10px;">${storyData.nem || 'اسم المستخدم'}</div>
+                                <div style="display: flex; gap: 15px; font-size: 13px; color: #555;">
+                                    <span><i class="fa-solid fa-eye"></i> ${storyData.views + 1}</span>
+                                    <span><i class="fa-solid fa-list"></i> ${chList.length} جزء</span>
+                                </div>
+                            </div>
+                            <div class="detail-img" style="background-image: url(${storyData.image_data});"></div>
+                        </div>
+                        <div style="display: flex; border-bottom: 2px solid #eee; margin-bottom: 15px; cursor: pointer;">
+                            <div id="tab-summary" style="flex: 1; text-align: center; padding: 10px; ${isSummary ? 'border-bottom: 2px solid #ff500a; font-weight: bold;' : 'color: #888;'}">الملخص</div>
+                            <div id="tab-chapters" style="flex: 1; text-align: center; padding: 10px; ${!isSummary ? 'border-bottom: 2px solid #ff500a; font-weight: bold;' : 'color: #888;'}">فصول (${chList.length})</div>
+                        </div>
+                        <div id="dynamic-view">
+                            ${isSummary ? `
+                                <div style="line-height: 1.8; color: #333; font-size: 14px; white-space: pre-wrap;">~ ${storyData.description}</div>
+                                <button id="start-read-btn" style="width: 100%; background: #000; color: #fff; padding: 15px; border: none; border-radius: 30px; font-weight: bold; margin-top: 20px; font-size: 16px; cursor: pointer;">ابدأ القراءة</button>
+                                <button id="lib-add-btn" style="width: 100%; background: #fff; color: #ff500a; border: 2px solid #ff500a; padding: 15px; border-radius: 30px; font-weight: bold; margin-top: 10px; font-size: 16px; cursor: pointer;">تحميل في المكتبة</button>
+                            ` : `
+                                <div id="chapters-list">
+                                    ${chList.map((ch, i) => `
+                                        <div class="chapter-item" style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="showChapter(${i})">
+                                            <span>${ch.title || 'الفصل ' + (i+1)}</span>
+                                            <i class="fa-solid fa-chevron-left" style="color: #ccc; font-size: 14px;"></i>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('tab-summary').onclick = () => updateStoryUI('summary');
+                document.getElementById('tab-chapters').onclick = () => updateStoryUI('chapters');
+                
+                if (isSummary) {
+                    document.getElementById('start-read-btn').onclick = () => updateStoryUI('chapters');
+                    document.getElementById('lib-add-btn').onclick = () => {
+                        let lib = JSON.parse(localStorage.getItem('myLibrary') || '[]');
+                        if(lib.length >= 6) return showCustomAlert('مكتبتك ممتلئة احذف منها لإضافة قصص جديدة');
+                        if(lib.find(s => s.id === storyData.id)) return showCustomAlert('القصة موجودة مسبقاً');
+                        lib.push(storyData);
+                        localStorage.setItem('myLibrary', JSON.stringify(lib));
+                        showCustomAlert('تم تحميل القصة للمكتبة');
+                    };
+                }
+            };
+            
+            window.showChapter = (index) => {
+                // استدعاء الإعلان البيني من Start.io عند الضغط على الفصل
+                if (window.Android && window.Android.showInterstitial) {
+                    window.Android.showInterstitial("204776727");
+                }
+
+                const ch = window.currentChapters[index];
+                document.getElementById('story-detail-top-bar').innerHTML = `<span onclick="openStoryDetail({id: '${story.id}'})" style="cursor:pointer; font-weight:bold;">رجوع</span><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                document.getElementById('detail-content').innerHTML = `
+                    <div style="padding: 20px; font-size: 16px; line-height: 1.9; color: #222; white-space: pre-wrap;">${ch.content}</div>
+                `;
+            };
+            updateStoryUI('summary');
+        }
+
+        async function showLibrary() {
+            const localCont = document.getElementById('local-library-container');
+            const lib = JSON.parse(localStorage.getItem('myLibrary') || '[]');
+            localCont.innerHTML = '';
+            
+            lib.forEach(s => {
+                const wrapper = document.createElement('div');
+                wrapper.style.position = 'relative';
+                wrapper.innerHTML = `
+                    <div class="story-item" style="background-image: url(${s.image_data}); width: 100%;"></div>
+                    <div class="delete-btn" style="position: absolute; top: 5px; right: 5px; border-radius: 50%; padding: 5px; cursor: pointer; color: #ff500a; z-index: 10;">
+                        <i class="fa-solid fa-trash"></i>
+                    </div>
+                `;
+                wrapper.querySelector('.story-item').onclick = () => {
+                     const originalHtml = wrapper.querySelector('.story-item').innerHTML;
+                     wrapper.querySelector('.story-item').innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%;"><i class="fa-solid fa-spinner fa-spin" style="color:#ff500a;"></i></div>`;
+                     openStoryDetail(s).finally(() => { wrapper.querySelector('.story-item').innerHTML = originalHtml; });
+                };
+                wrapper.querySelector('.delete-btn').onclick = (e) => {
+                    e.stopPropagation();
+                    storyToDeleteId = s.id;
+                    confirmDialog.style.display = 'flex';
+                    confirmYes.onclick = () => {
+                        let lib = JSON.parse(localStorage.getItem('myLibrary') || '[]');
+                        const updatedLib = lib.filter(item => item.id !== storyToDeleteId);
+                        localStorage.setItem('myLibrary', JSON.stringify(updatedLib));
+                        confirmDialog.style.display = 'none';
+                        showLibrary();
+                    };
+                    confirmNo.onclick = () => confirmDialog.style.display = 'none';
+                };
+                localCont.appendChild(wrapper);
+            });
+
+            const recCont = document.getElementById('recommended-container');
+            const { data: recs } = await _supabase.from('stories').select('*').limit(10);
+            recCont.innerHTML = '';
+            (recs || []).forEach(s => {
+                const w = document.createElement('div');
+                w.style.minWidth = '100px';
+                w.innerHTML = `<div class="story-item" style="background-image: url(${s.image_data});</div>`;
+                w.onclick = () => {
+                    const originalW = w.innerHTML;
+                    w.innerHTML = `<div class="story-item" style="display:flex; align-items:center; justify-content:center;"><i class="fa-solid fa-spinner fa-spin" style="color:#ff500a;"></i></div>`;
+                    openStoryDetail(s).finally(() => { w.innerHTML = originalW; });
+                };
+                recCont.appendChild(w);
+            });
+        }
+
+        btnMyStories.addEventListener('click', async () => {
+            writeScreen.style.display = 'none';
+            selectStoryScreen.style.display = 'block';
+            const { data } = await _supabase.from('stories').select('id, title, description, image_data').eq('user_id', currentUserId);
+            storyListContainer.innerHTML = '';
+            (data || []).forEach(story => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.style.alignItems = 'center';
+                item.innerHTML = `<span>${story.title}</span> <i class="fa-solid fa-bars" id="opt-${story.id}"></i>`;
+                const optBtn = item.querySelector(`#opt-${story.id}`);
+                optBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    item.innerHTML = `
+                        <div style="display:flex; gap:10px; width: 100%; justify-content: space-around;">
+                            <button style="padding: 10px; border:none; background:#ff500a; color:#fff; border-radius:5px;" onclick="deleteStory('${story.id}')">حذف القصة</button>
+                            <button style="padding: 10px; border:none; background:#333; color:#fff; border-radius:5px;" onclick="showChaptersForDelete('${story.id}')">حذف فصل</button>
+                        </div>
+                    `;
+                };
+                storyListContainer.appendChild(item);
+            });
+        });
+
+        window.deleteStory = async (id) => {
+            confirmDialog.style.display = 'flex';
+            confirmYes.onclick = async () => {
+                confirmDialog.style.display = 'none';
+                await _supabase.from('stories').delete().eq('id', id);
+                location.reload();
+            };
+            confirmNo.onclick = () => { confirmDialog.style.display = 'none'; };
+        };
+
+        window.showChaptersForDelete = async (storyId) => {
+            const { data: chapters } = await _supabase.from('chapters').select('id, title').eq('story_id', storyId);
+            storyListContainer.innerHTML = '<div class="menu-item" onclick="location.reload()">رجوع للقائمة</div>';
+            (chapters || []).forEach(ch => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerHTML = `<span>${ch.title}</span> <i class="fa-solid fa-trash" style="color:red;"></i>`;
+                item.onclick = async () => {
+                    confirmDialog.style.display = 'flex';
+                    confirmYes.onclick = async () => {
+                        confirmDialog.style.display = 'none';
+                        await _supabase.from('chapters').delete().eq('id', ch.id);
+                        location.reload();
+                    };
+                    confirmNo.onclick = () => { confirmDialog.style.display = 'none'; };
+                };
+                storyListContainer.appendChild(item);
+            });
+        };
+
+        btnCreateStory.addEventListener('click', () => {
+            writeScreen.style.display = 'none';
+            createStoryScreen.style.display = 'block';
+            isEditMode = false;
+            hasImage = false;
+            coverFile = null;
+            titleInput.value = '';
+            nemInput.value = '';
+            descInput.value = '';
+            document.getElementById('upload-label').innerHTML = '<i class="fa-solid fa-plus"></i> أضف غلافاً';
+            checkForm();
+        });
+
+        btnAddChapter.addEventListener('click', async () => {
+            writeScreen.style.display = 'none';
+            selectStoryScreen.style.display = 'block';
+            const { data } = await _supabase.from('stories').select('id, title').eq('user_id', currentUserId);
+            storyListContainer.innerHTML = '';
+            (data || []).forEach(story => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerHTML = `<span>${story.title}</span>`;
+                item.onclick = () => {
+                    selectedStoryId = story.id;
+                    selectStoryScreen.style.display = 'none';
+                    editorScreen.style.display = 'block';
+                };
+                storyListContainer.appendChild(item);
+            });
+        });
+
+        btnEdit.addEventListener('click', () => {
+            writeScreen.style.display = 'none';
+            editOptionScreen.style.display = 'block';
+        });
+
+        document.getElementById('btn-edit-story-list').addEventListener('click', async () => {
+            editType = 'story';
+            editOptionScreen.style.display = 'none';
+            selectStoryScreen.style.display = 'block';
+            const { data } = await _supabase.from('stories').select('id, title, description, image_data, nem').eq('user_id', currentUserId);
+            storyListContainer.innerHTML = '';
+            (data || []).forEach(story => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerHTML = `<span>${story.title}</span>`;
+                item.onclick = () => {
+                    isEditMode = true;
+                    editTargetId = story.id;
+                    titleInput.value = story.title;
+                    nemInput.value = story.nem || '';
+                    descInput.value = story.description;
+                    hasImage = true; 
+                    coverFile = null;
+                    document.getElementById('upload-label').innerHTML = `<img src="${story.image_data}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">`;
+                    selectStoryScreen.style.display = 'none';
+                    createStoryScreen.style.display = 'block';
+                    nextBtn.classList.add('active'); 
+                };
+                storyListContainer.appendChild(item);
+            });
+        });
+
+        document.getElementById('btn-edit-chapter-list').addEventListener('click', async () => {
+            editType = 'chapter';
+            editOptionScreen.style.display = 'none';
+            selectStoryScreen.style.display = 'block';
+            const { data } = await _supabase.from('stories').select('id, title').eq('user_id', currentUserId);
+            storyListContainer.innerHTML = '';
+            (data || []).forEach(story => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerHTML = `<span>${story.title}</span>`;
+                item.onclick = async () => {
+                    const { data: chapters } = await _supabase.from('chapters').select('id, title, content').eq('story_id', story.id);
+                    storyListContainer.innerHTML = '';
+                    (chapters || []).forEach(ch => {
+                        const chItem = document.createElement('div');
+                        chItem.className = 'menu-item';
+                        chItem.innerHTML = `<span>${ch.title}</span>`;
+                        chItem.onclick = () => {
+                            isEditMode = true;
+                            editTargetId = ch.id;
+                            document.getElementById('part-title').value = ch.title;
+                            editorArea.value = ch.content;
+                            selectStoryScreen.style.display = 'none';
+                            editorScreen.style.display = 'block';
+                        };
+                        storyListContainer.appendChild(chItem);
+                    });
+                };
+                storyListContainer.appendChild(item);
+            });
+        });
+
+        fileUpload.addEventListener('change', function() {
+            coverFile = this.files[0];
+            if(coverFile) { 
+                hasImage = true; 
+                checkForm(); 
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('upload-label').innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">`;
+                };
+                reader.readAsDataURL(coverFile);
+            }
+        });
+
+        titleInput.addEventListener('input', checkForm);
+        nemInput.addEventListener('input', checkForm);
+        descInput.addEventListener('input', checkForm);
+
+        function checkForm() {
+            if(hasImage && titleInput.value.length > 0 && nemInput.value.length > 0 && descInput.value.length > 0) nextBtn.classList.add('active');
+            else nextBtn.classList.remove('active');
+        }
+
+        nextBtn.addEventListener('click', async () => {
+            if(!nextBtn.classList.contains('active') || isPublishing) return;
+            
+            isPublishing = true;
+            nextBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+            if(isEditMode && editType === 'story') {
+                try {
+                    let imgUrl = null;
+                    if(coverFile) {
+                        const ext = coverFile.name.split('.').pop();
+                        const fileName = `img_${Date.now()}.${ext}`;
+                        await _supabase.storage.from('story-images').upload(fileName, coverFile);
+                        const { data: linkData } = _supabase.storage.from('story-images').getPublicUrl(fileName);
+                        imgUrl = linkData.publicUrl;
+                    }
+                    
+                    const updateObj = { title: titleInput.value, description: descInput.value, nem: nemInput.value };
+                    if(imgUrl) updateObj.image_data = imgUrl;
+
+                    await _supabase.from('stories').update(updateObj).eq('id', editTargetId);
+                    shouldReload = true;
+                    showCustomAlert('تم التعديل بنجاح');
+                } catch (e) {
+                    isPublishing = false;
+                    nextBtn.innerHTML = 'التالي';
+                    showCustomAlert("خطأ في الاتصال");
+                }
+            } else {
+                createStoryScreen.style.display = 'none';
+                editorScreen.style.display = 'block';
+                isPublishing = false;
+                nextBtn.innerHTML = 'التالي';
+            }
+        });
+
+        publishBtn.addEventListener('click', async () => {
+            if (isPublishing) return;
+            isPublishing = true;
+            publishBtn.disabled = true;
+            publishBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+            try {
+                if(isEditMode && editType === 'chapter') {
+                    await _supabase.from('chapters').update({ 
+                        title: document.getElementById('part-title').value, 
+                        content: editorArea.value 
+                    }).eq('id', editTargetId);
+                    shouldReload = true;
+                    showCustomAlert('تم النشر بنجاح');
+                } else if (selectedStoryId) {
+                    await _supabase.from('chapters').insert([{ 
+                        story_id: selectedStoryId, 
+                        title: document.getElementById('part-title').value, 
+                        content: editorArea.value 
+                    }]);
+                    shouldReload = true;
+                    showCustomAlert('تم النشر بنجاح');
+                } else {
+                    const ext = coverFile.name.split('.').pop();
+                    const fileName = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+                    const { data: upData, error: upErr } = await _supabase.storage.from('story-images').upload(fileName, coverFile);
+                    if (upErr) throw upErr;
+
+                    const { data: linkData } = _supabase.storage.from('story-images').getPublicUrl(fileName);
+                    
+                    const { data: newStory, error: storyErr } = await _supabase.from('stories').insert([{
+                        title: titleInput.value,
+                        description: descInput.value,
+                        image_data: linkData.publicUrl,
+                        user_id: currentUserId,
+                        nem: nemInput.value,
+                        views: 0,
+                        created_at: new Date().toISOString()
+                    }]).select();
+
+                    if (storyErr) throw storyErr;
+
+                    await _supabase.from('chapters').insert([{
+                        story_id: newStory[0].id,
+                        title: document.getElementById('part-title').value || 'الفصل الأول',
+                        content: editorArea.value
+                    }]);
+                    shouldReload = true;
+                    showCustomAlert('تم النشر بنجاح');
+                }
+            } catch (e) {
+                isPublishing = false;
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = 'نشر';
+                showCustomAlert("حدث خطأ أثناء النشر: " + e.message);
+            }
+        });
+
+        items.forEach((item, index) => {
+            item.addEventListener('click', () => {
+                content.style.display = 'none';
+                searchScreen.style.display = 'none';
+                writeScreen.style.display = 'none';
+                libraryScreen.style.display = 'none';
+                createStoryScreen.style.display = 'none';
+                editorScreen.style.display = 'none';
+                storyDetailScreen.style.display = 'none';
+                selectStoryScreen.style.display = 'none';
+                editOptionScreen.style.display = 'none';
+
+                items.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+
+                if (index === 0) content.style.display = 'block';
+                else if (index === 1) searchScreen.style.display = 'block';
+                else if (index === 2) writeScreen.style.display = 'block';
+                else if (index === 3) {
+                    libraryScreen.style.display = 'block';
+                    showLibrary();
+                }
+            });
+        });
+        
+        checkForm();
+        checkEditor();
+    </script>
+</body>
+</html>
