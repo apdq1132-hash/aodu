@@ -195,7 +195,6 @@
         _supabase.auth.getSession().then(({ data }) => {
             if (data.session) {
                 currentUserId = data.session.user.id;
-                document.getElementById('main-app').style.display = 'block';
                 
                 // التحقق مما إذا كان الرابط يحتوي على ID فصل لفتحه تلقائياً لإجبار الإعلان
                 const urlParams = new URLSearchParams(window.location.search);
@@ -203,11 +202,15 @@
                 const storyId = urlParams.get('story_id');
                 
                 if (chapterId && storyId) {
+                    // منع ظهور الصفحة الرئيسية فوراً
+                    document.getElementById('main-app').style.display = 'none';
                     loadStoriesFromDB().then(() => {
                         const story = window.storiesCache.find(s => s.id == storyId);
-                        if(story) openStoryDetail(story, chapterId);
+                        // تمرير viewOverride كـ 'chapters' لمنع فتح الملخص
+                        if(story) openStoryDetail(story, chapterId, 'chapters');
                     });
                 } else {
+                    document.getElementById('main-app').style.display = 'block';
                     loadStoriesFromDB();
                 }
             } else {
@@ -364,7 +367,7 @@
             loadingSpinner.style.display = 'none';
         }
 
-        async function openStoryDetail(story, autoChapterId = null) {
+        async function openStoryDetail(story, autoChapterId = null, viewOverride = 'summary') {
             let storyData = window.storiesCache ? window.storiesCache.find(s => s.id === story.id) : null;
             if(!storyData) {
                 const { data } = await _supabase.from('stories').select('*').eq('id', story.id).single();
@@ -376,6 +379,7 @@
             window.currentChapters = chapters;
             _supabase.from('stories').update({ views: (storyData.views || 0) + 1 }).eq('id', storyData.id);
             
+            document.getElementById('main-app').style.display = 'block';
             content.style.display = 'none';
             libraryScreen.style.display = 'none';
             searchScreen.style.display = 'none';
@@ -459,6 +463,7 @@
             
             window.showChapter = (index, storyId) => {
                 const ch = window.currentChapters[index];
+                // الحل الذكي: تغيير الرابط لإجبار AppCreator24 على إظهار إعلان بيني
                 window.location.href = window.location.pathname + `?story_id=${storyId}&chapter_id=${ch.id}`;
             };
 
@@ -470,7 +475,7 @@
                 `;
             }
 
-            updateStoryUI('summary');
+            updateStoryUI(viewOverride);
         }
 
         async function showLibrary() {
