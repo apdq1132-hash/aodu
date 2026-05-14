@@ -203,8 +203,8 @@
                 const storyId = urlParams.get('story_id');
                 
                 if (chapterId && storyId) {
-                    // تم التعديل هنا لفتح التفاصيل فوراً ومنع التصادم البرمجي
-                    _supabase.from('stories').select('*').eq('id', storyId).single().then(({data: story}) => {
+                    loadStoriesFromDB().then(() => {
+                        const story = window.storiesCache.find(s => s.id == storyId);
                         if(story) openStoryDetail(story, chapterId);
                     });
                 } else {
@@ -459,8 +459,7 @@
             
             window.showChapter = (index, storyId) => {
                 const ch = window.currentChapters[index];
-                // تم التعديل هنا لضمان مسح الحالة ومنع التخبط
-                window.location.replace(window.location.pathname + `?story_id=${storyId}&chapter_id=${ch.id}`);
+                window.location.href = window.location.pathname + `?story_id=${storyId}&chapter_id=${ch.id}`;
             };
 
             function renderChapterContent(index, storyId) {
