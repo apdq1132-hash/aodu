@@ -197,13 +197,14 @@
                 currentUserId = data.session.user.id;
                 document.getElementById('main-app').style.display = 'block';
                 
+                // التحقق مما إذا كان الرابط يحتوي على ID فصل لفتحه تلقائياً لإجبار الإعلان
                 const urlParams = new URLSearchParams(window.location.search);
                 const chapterId = urlParams.get('chapter_id');
                 const storyId = urlParams.get('story_id');
                 
                 if (chapterId && storyId) {
-                    loadStoriesFromDB().then(() => {
-                        const story = window.storiesCache.find(s => s.id == storyId);
+                    // تم التعديل هنا لفتح التفاصيل فوراً ومنع التصادم البرمجي
+                    _supabase.from('stories').select('*').eq('id', storyId).single().then(({data: story}) => {
                         if(story) openStoryDetail(story, chapterId);
                     });
                 } else {
@@ -321,17 +322,22 @@
             
             if (data) {
                 window.storiesCache = data;
+                
+                // خلط القصص عشوائياً
                 let shuffledStories = [...data].sort(() => 0.5 - Math.random());
                 let usedStoryIds = new Set();
 
                 containers.forEach((container, index) => {
                     container.innerHTML = '';
+                    
+                    // اختيار 10 قصص لم تظهر سابقاً في الرفوف العلوية
                     let count = 0;
                     for (let story of shuffledStories) {
                         if (count >= 10) break;
                         if (!usedStoryIds.has(story.id)) {
                             usedStoryIds.add(story.id);
                             count++;
+                            
                             const wrapper = document.createElement('div');
                             wrapper.style.minWidth = '100px';
                             wrapper.onclick = (e) => {
@@ -341,10 +347,14 @@
                                     wrapper.innerHTML = originalContent;
                                 });
                             };
+                            
                             let htmlContent = `<div class="story-item" style="background-image: url(${story.image_data});"></div>`;
+                            
+                            // إضافة العين والمشاهدات للرف الثالث (index 2) والرابع (index 3)
                             if (index === 2 || index === 3) {
                                 htmlContent += `<div style="text-align: center; margin-top: 5px; font-size: 12px; color: #666; font-weight: bold;"><i class="fa-solid fa-eye"></i> ${story.views || 0}</div>`;
                             }
+                            
                             wrapper.innerHTML = htmlContent;
                             container.appendChild(wrapper);
                         }
@@ -362,6 +372,7 @@
             }
             
             const { data: chapters } = await _supabase.from('chapters').select('*').eq('story_id', story.id).order('id', { ascending: true });
+            
             window.currentChapters = chapters;
             _supabase.from('stories').update({ views: (storyData.views || 0) + 1 }).eq('id', storyData.id);
             
@@ -373,17 +384,19 @@
             editorScreen.style.display = 'none';
             selectStoryScreen.style.display = 'none';
             editOptionScreen.style.display = 'none';
+
             storyDetailScreen.style.display = 'block';
 
             const updateStoryUI = (viewType) => {
                 const isSummary = viewType === 'summary';
                 const chList = chapters || [];
+                
+                // تحديث الـ Top Bar بناءً على الحالة
                 const topBar = document.getElementById('story-detail-top-bar');
-
                 if (viewType === 'summary') {
                     topBar.innerHTML = `<i class="fa-solid fa-arrow-right" onclick="location.reload()" style="font-size: 20px; cursor: pointer;"></i><i class="fa-solid fa-ellipsis-vertical"></i>`;
                 } else if (viewType === 'chapters') {
-                    topBar.innerHTML = `<i class="fa-solid fa-arrow-right" onclick="location.reload()" style="font-size: 20px; cursor: pointer;"></i><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                    topBar.innerHTML = `<span></span><i class="fa-solid fa-ellipsis-vertical"></i>`;
                 }
 
                 document.getElementById('detail-content').innerHTML = `
@@ -426,14 +439,7 @@
                 document.getElementById('tab-chapters').onclick = () => updateStoryUI('chapters');
                 
                 if (isSummary) {
-                    document.getElementById('start-read-btn').onclick = () => {
-                         const chList = window.currentChapters || [];
-                         if (chList.length > 0) {
-                             window.showChapter(0, storyData.id);
-                         } else {
-                             showCustomAlert('لا توجد فصول لهذه القصة بعد');
-                         }
-                    };
+                    document.getElementById('start-read-btn').onclick = () => updateStoryUI('chapters');
                     document.getElementById('lib-add-btn').onclick = () => {
                         let lib = JSON.parse(localStorage.getItem('myLibrary') || '[]');
                         if(lib.length >= 6) return showCustomAlert('مكتبتك ممتلئة احذف منها لإضافة قصص جديدة');
@@ -444,6 +450,7 @@
                     };
                 }
 
+                // فتح الفصل تلقائياً إذا جاء من رابط خارجي لتنفيذ الإعلان
                 if(autoChapterId && !isSummary) {
                     const idx = chList.findIndex(c => c.id == autoChapterId);
                     if(idx !== -1) renderChapterContent(idx, story.id);
@@ -452,14 +459,13 @@
             
             window.showChapter = (index, storyId) => {
                 const ch = window.currentChapters[index];
-                // استخدام رابط كامل ونظيف لإجبار AppCreator24 على إظهار الإعلان ومنع التخبط
-                const currentUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                window.location.href = currentUrl + `?story_id=${storyId}&chapter_id=${ch.id}`;
+                // تم التعديل هنا لضمان مسح الحالة ومنع التخبط
+                window.location.replace(window.location.pathname + `?story_id=${storyId}&chapter_id=${ch.id}`);
             };
 
             function renderChapterContent(index, storyId) {
                 const ch = window.currentChapters[index];
-                document.getElementById('story-detail-top-bar').innerHTML = `<i class="fa-solid fa-arrow-right" onclick="openStoryDetail({id: '${storyId}'})" style="font-size: 20px; cursor: pointer;"></i><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                document.getElementById('story-detail-top-bar').innerHTML = `<span onclick="openStoryDetail({id: '${storyId}'})" style="cursor:pointer; font-weight:bold;">رجوع</span><i class="fa-solid fa-ellipsis-vertical"></i>`;
                 document.getElementById('detail-content').innerHTML = `
                     <div style="padding: 20px; font-size: 16px; line-height: 1.9; color: #222; white-space: pre-wrap;">${ch.content}</div>
                 `;
@@ -472,10 +478,16 @@
             const localCont = document.getElementById('local-library-container');
             const lib = JSON.parse(localStorage.getItem('myLibrary') || '[]');
             localCont.innerHTML = '';
+            
             lib.forEach(s => {
                 const wrapper = document.createElement('div');
                 wrapper.style.position = 'relative';
-                wrapper.innerHTML = `<div class="story-item" style="background-image: url(${s.image_data}); width: 100%;"></div><div class="delete-btn" style="position: absolute; top: 5px; right: 5px; border-radius: 50%; padding: 5px; cursor: pointer; color: #ff500a; z-index: 10;"><i class="fa-solid fa-trash"></i></div>`;
+                wrapper.innerHTML = `
+                    <div class="story-item" style="background-image: url(${s.image_data}); width: 100%;"></div>
+                    <div class="delete-btn" style="position: absolute; top: 5px; right: 5px; border-radius: 50%; padding: 5px; cursor: pointer; color: #ff500a; z-index: 10;">
+                        <i class="fa-solid fa-trash"></i>
+                    </div>
+                `;
                 wrapper.querySelector('.story-item').onclick = () => {
                      const originalHtml = wrapper.querySelector('.story-item').innerHTML;
                      wrapper.querySelector('.story-item').innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%;"><i class="fa-solid fa-spinner fa-spin" style="color:#ff500a;"></i></div>`;
@@ -496,6 +508,7 @@
                 };
                 localCont.appendChild(wrapper);
             });
+
             const recCont = document.getElementById('recommended-container');
             const { data: recs } = await _supabase.from('stories').select('*').limit(10);
             recCont.innerHTML = '';
@@ -525,7 +538,12 @@
                 const optBtn = item.querySelector(`#opt-${story.id}`);
                 optBtn.onclick = (e) => {
                     e.stopPropagation();
-                    item.innerHTML = `<div style="display:flex; gap:10px; width: 100%; justify-content: space-around;"><button style="padding: 10px; border:none; background:#ff500a; color:#fff; border-radius:5px;" onclick="deleteStory('${story.id}')">حذف القصة</button><button style="padding: 10px; border:none; background:#333; color:#fff; border-radius:5px;" onclick="showChaptersForDelete('${story.id}')">حذف فصل</button></div>`;
+                    item.innerHTML = `
+                        <div style="display:flex; gap:10px; width: 100%; justify-content: space-around;">
+                            <button style="padding: 10px; border:none; background:#ff500a; color:#fff; border-radius:5px;" onclick="deleteStory('${story.id}')">حذف القصة</button>
+                            <button style="padding: 10px; border:none; background:#333; color:#fff; border-radius:5px;" onclick="showChaptersForDelete('${story.id}')">حذف فصل</button>
+                        </div>
+                    `;
                 };
                 storyListContainer.appendChild(item);
             });
@@ -680,8 +698,10 @@
 
         nextBtn.addEventListener('click', async () => {
             if(!nextBtn.classList.contains('active') || isPublishing) return;
+            
             isPublishing = true;
             nextBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
             if(isEditMode && editType === 'story') {
                 try {
                     let imgUrl = null;
@@ -692,8 +712,10 @@
                         const { data: linkData } = _supabase.storage.from('story-images').getPublicUrl(fileName);
                         imgUrl = linkData.publicUrl;
                     }
+                    
                     const updateObj = { title: titleInput.value, description: descInput.value, nem: nemInput.value };
                     if(imgUrl) updateObj.image_data = imgUrl;
+
                     await _supabase.from('stories').update(updateObj).eq('id', editTargetId);
                     shouldReload = true;
                     showCustomAlert('تم التعديل بنجاح');
@@ -715,6 +737,7 @@
             isPublishing = true;
             publishBtn.disabled = true;
             publishBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
             try {
                 if(isEditMode && editType === 'chapter') {
                     await _supabase.from('chapters').update({ 
@@ -736,7 +759,9 @@
                     const fileName = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
                     const { data: upData, error: upErr } = await _supabase.storage.from('story-images').upload(fileName, coverFile);
                     if (upErr) throw upErr;
+
                     const { data: linkData } = _supabase.storage.from('story-images').getPublicUrl(fileName);
+                    
                     const { data: newStory, error: storyErr } = await _supabase.from('stories').insert([{
                         title: titleInput.value,
                         description: descInput.value,
@@ -746,7 +771,9 @@
                         views: 0,
                         created_at: new Date().toISOString()
                     }]).select();
+
                     if (storyErr) throw storyErr;
+
                     await _supabase.from('chapters').insert([{
                         story_id: newStory[0].id,
                         title: document.getElementById('part-title').value || 'الفصل الأول',
@@ -774,8 +801,10 @@
                 storyDetailScreen.style.display = 'none';
                 selectStoryScreen.style.display = 'none';
                 editOptionScreen.style.display = 'none';
+
                 items.forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
+
                 if (index === 0) content.style.display = 'block';
                 else if (index === 1) searchScreen.style.display = 'block';
                 else if (index === 2) writeScreen.style.display = 'block';
