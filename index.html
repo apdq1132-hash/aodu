@@ -196,7 +196,20 @@
             if (data.session) {
                 currentUserId = data.session.user.id;
                 document.getElementById('main-app').style.display = 'block';
-                loadStoriesFromDB();
+                
+                // التحقق مما إذا كان الرابط يحتوي على ID فصل لفتحه تلقائياً لإجبار الإعلان
+                const urlParams = new URLSearchParams(window.location.search);
+                const chapterId = urlParams.get('chapter_id');
+                const storyId = urlParams.get('story_id');
+                
+                if (chapterId && storyId) {
+                    loadStoriesFromDB().then(() => {
+                        const story = window.storiesCache.find(s => s.id == storyId);
+                        if(story) openStoryDetail(story, chapterId);
+                    });
+                } else {
+                    loadStoriesFromDB();
+                }
             } else {
                 document.getElementById('auth-screen').style.display = 'flex';
             }
@@ -351,7 +364,7 @@
             loadingSpinner.style.display = 'none';
         }
 
-        async function openStoryDetail(story) {
+        async function openStoryDetail(story, autoChapterId = null) {
             let storyData = window.storiesCache ? window.storiesCache.find(s => s.id === story.id) : null;
             if(!storyData) {
                 const { data } = await _supabase.from('stories').select('*').eq('id', story.id).single();
@@ -411,7 +424,7 @@
                             ` : `
                                 <div id="chapters-list">
                                     ${chList.map((ch, i) => `
-                                        <div class="chapter-item" style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="showChapter(${i})">
+                                        <div class="chapter-item" style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="showChapter(${i}, '${story.id}')">
                                             <span>${ch.title || 'الفصل ' + (i+1)}</span>
                                             <i class="fa-solid fa-chevron-left" style="color: #ccc; font-size: 14px;"></i>
                                         </div>
@@ -436,20 +449,28 @@
                         showCustomAlert('تم تحميل القصة للمكتبة');
                     };
                 }
+
+                // فتح الفصل تلقائياً إذا جاء من رابط خارجي لتنفيذ الإعلان
+                if(autoChapterId && !isSummary) {
+                    const idx = chList.findIndex(c => c.id == autoChapterId);
+                    if(idx !== -1) renderChapterContent(idx, story.id);
+                }
             };
             
-            window.showChapter = (index) => {
-                // استدعاء الإعلان البيني من Start.io عند الضغط على الفصل
-                if (window.Android && window.Android.showInterstitial) {
-                    window.Android.showInterstitial("204776727");
-                }
-
+            window.showChapter = (index, storyId) => {
                 const ch = window.currentChapters[index];
-                document.getElementById('story-detail-top-bar').innerHTML = `<span onclick="openStoryDetail({id: '${story.id}'})" style="cursor:pointer; font-weight:bold;">رجوع</span><i class="fa-solid fa-ellipsis-vertical"></i>`;
+                // الحل الذكي: تغيير الرابط لإجبار AppCreator24 على إظهار إعلان بيني
+                window.location.href = window.location.pathname + `?story_id=${storyId}&chapter_id=${ch.id}`;
+            };
+
+            function renderChapterContent(index, storyId) {
+                const ch = window.currentChapters[index];
+                document.getElementById('story-detail-top-bar').innerHTML = `<span onclick="openStoryDetail({id: '${storyId}'})" style="cursor:pointer; font-weight:bold;">رجوع</span><i class="fa-solid fa-ellipsis-vertical"></i>`;
                 document.getElementById('detail-content').innerHTML = `
                     <div style="padding: 20px; font-size: 16px; line-height: 1.9; color: #222; white-space: pre-wrap;">${ch.content}</div>
                 `;
-            };
+            }
+
             updateStoryUI('summary');
         }
 
